@@ -13,15 +13,15 @@
 
 #define ARRAY_LEN(xs) sizeof(xs)/sizeof(xs[0])
 
-#define SQUARES_COUNT 8
-#define SQUARE_SIZE 100.0f
+#define SQUARES_COUNT 16
+#define SQUARE_SIZE 50.0f
 #define SQUARE_PAD (SQUARE_SIZE*0.2f)
 #define FONT_SIZE 68
 
 // ENV PART
 typedef struct Env {
   float delta_time;
-  float screen_wdith;
+  float screen_width;
   float screen_height;
   bool rendering;
   void *params;
@@ -64,7 +64,8 @@ typedef struct Plug {
   Font font;
   Rectangle squares[SQUARES_COUNT];
   Camera2D camera;
-  Task* tasks;
+  Task *tasks;
+  size_t task_idx;
 } Plug;
 
 Vector2 grid_2_world(size_t row, size_t col) {
@@ -76,25 +77,42 @@ Vector2 grid_2_world(size_t row, size_t col) {
 
 int main(int argc, char **argv) {
   // Initialization
+  Env env = {0};
+  env.screen_width = 800;
+  env.screen_height = 600;
   Plug p = {0};
   p.font =
       LoadFontEx("./assets/fonts/Vollkorn-Regular.ttf", FONT_SIZE, NULL, 0);
   for (size_t i = 0; i < SQUARES_COUNT; i++) {
-    p.squares[i].x = (i % 8) * SQUARE_SIZE + SQUARE_PAD;
-    p.squares[i].y = (int)(i / 8) * SQUARE_SIZE + SQUARE_PAD;
+    p.squares[i].x = (i % 8) * (SQUARE_SIZE + SQUARE_PAD);
+    p.squares[i].y = (int)(i / 8) * (SQUARE_SIZE + SQUARE_PAD);
     p.squares[i].width = SQUARE_SIZE;
     p.squares[i].height = SQUARE_SIZE;
   }
-
+  p.task_idx = 0;
   // add first task
   arrput(p.tasks, ((Task){
       .kind = TASK_MOVE, .as = {.move = grid_2_world(1, 1)}, .square_id = 0}));
   printf("starting sequencer_frontend\n");
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-  InitWindow(800, 600, "k-means");
+  InitWindow(env.screen_width, env.screen_height, "sequencer_frontend");
   while (!WindowShouldClose()) {
     BeginDrawing();
-    ClearBackground(GetColor(0x181818AA));
+    Color background_color = ColorFromHSV(0, 0, 0.05);
+    Color foreground_color = ColorFromHSV(0, 0, 0.95);
+
+    ClearBackground(background_color);
+    memset(&p.camera, 0 , sizeof(p.camera));
+    p.camera.zoom = 1.0f;
+    p.camera.target = CLITERAL(Vector2) {
+      // TODO: adjust to amount of squares
+      -3.0 * SQUARE_SIZE + SQUARE_PAD*0.5,
+      -env.screen_height/2 + SQUARE_SIZE + SQUARE_PAD*0.5,
+    };
+    BeginMode2D(p.camera);
+    for(size_t i = 0; i < SQUARES_COUNT; i++) {
+      DrawRectangleRec(p.squares[i], foreground_color);
+    }
     EndDrawing();
   }
   CloseWindow();
