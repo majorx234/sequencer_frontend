@@ -17,6 +17,7 @@
 #define SQUARE_SIZE 50.0f
 #define SQUARE_PAD (SQUARE_SIZE*0.2f)
 #define FONT_SIZE 68
+#define SQUARE_MOVE_DURATION 10
 
 // ENV PART
 typedef struct Env {
@@ -58,14 +59,23 @@ typedef struct {
 } Tasks;
 */
 
+typedef struct Square {
+  Vector2 position;
+  Color color;
+  Rectangle boundary;
+  Vector2 offset;
+} Square;
+
 // not really needed, no plugin concept yet
 typedef struct Plug {
   size_t size;
   Font font;
-  Rectangle squares[SQUARES_COUNT];
+  Square squares[SQUARES_COUNT];
+  // Rectangle squares[SQUARES_COUNT];
   Camera2D camera;
   Task *tasks;
   size_t task_idx;
+  float t; // time
 } Plug;
 
 Vector2 grid_2_world(size_t row, size_t col) {
@@ -80,27 +90,60 @@ int main(int argc, char **argv) {
   Env env = {0};
   env.screen_width = 800;
   env.screen_height = 600;
+  Color background_color = ColorFromHSV(0, 0, 0.05);
+  Color foreground_color = ColorFromHSV(0, 0, 0.95);
+
   Plug p = {0};
   p.font =
       LoadFontEx("./assets/fonts/Vollkorn-Regular.ttf", FONT_SIZE, NULL, 0);
   for (size_t i = 0; i < SQUARES_COUNT; i++) {
-    p.squares[i].x = (i % 8) * (SQUARE_SIZE + SQUARE_PAD);
-    p.squares[i].y = (int)(i / 8) * (SQUARE_SIZE + SQUARE_PAD);
-    p.squares[i].width = SQUARE_SIZE;
-    p.squares[i].height = SQUARE_SIZE;
+    Vector2 world = grid_2_world((int)(i / 8), ( i % 8));
+    p.squares[i].boundary.x = world.x;
+    p.squares[i].boundary.y = world.y;
+    p.squares[i].boundary.width = SQUARE_SIZE;
+    p.squares[i].boundary.height = SQUARE_SIZE;
+    p.squares[i].color = foreground_color;
+    p.squares[i].offset = CLITERAL(Vector2){0};
   }
   p.task_idx = 0;
   // add first task
   arrput(p.tasks, ((Task){
-      .kind = TASK_MOVE, .as = {.move = grid_2_world(1, 1)}, .square_id = 0}));
+      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 1)}, .square_id = 0}));
+  arrput(p.tasks, ((Task){
+      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 2)}, .square_id = 1}));
+  arrput(p.tasks, ((Task){
+      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 3)}, .square_id = 2}));
   printf("starting sequencer_frontend\n");
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(env.screen_width, env.screen_height, "sequencer_frontend");
   while (!WindowShouldClose()) {
     BeginDrawing();
-    Color background_color = ColorFromHSV(0, 0, 0.05);
-    Color foreground_color = ColorFromHSV(0, 0, 0.95);
 
+    // iterate through tasks
+    if(p.task_idx < arrlen(p.tasks)) {
+      Task task = p.tasks[p.task_idx];
+      switch (task.kind) {
+        case TASK_MOVE: {
+          p.t = (p.t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
+          if (task.square_id < SQUARES_COUNT) {
+            Square* square = &p.squares[task.square_id];
+            Vector2 position = {
+              square->boundary.x,
+              square->boundary.y,
+            };
+            square->offset = Vector2Subtract(task.as.move, position);
+            square->offset = Vector2Scale(square->offset, p.t);
+          }
+          if (p.t >= 1.0) {
+            p.t = 0.0f;
+            p.task_idx +=1;
+          }
+        } break;
+        case TASK_COLOR: {
+          //n.i.y
+        } break;
+      }
+    }
     ClearBackground(background_color);
     memset(&p.camera, 0 , sizeof(p.camera));
     p.camera.zoom = 1.0f;
@@ -111,9 +154,13 @@ int main(int argc, char **argv) {
     };
     BeginMode2D(p.camera);
     for(size_t i = 0; i < SQUARES_COUNT; i++) {
-      DrawRectangleRec(p.squares[i], foreground_color);
+      Rectangle boundary = p.squares[i].boundary;
+      boundary.x += p.squares[i].offset.x;
+      boundary.y += p.squares[i].offset.y;
+      DrawRectangleRec(boundary, p.squares[i].color);
     }
     EndDrawing();
+    p.t += 0.001;
   }
   CloseWindow();
   UnloadFont(p.font);
