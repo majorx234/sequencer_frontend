@@ -17,47 +17,22 @@
 #define SQUARE_SIZE 50.0f
 #define SQUARE_PAD (SQUARE_SIZE*0.2f)
 #define FONT_SIZE 68
-#define SQUARE_MOVE_DURATION 10
+#define SQUARE_MOVE_DURATION 0.3
 
-// ENV PART
-typedef struct Env {
-  float delta_time;
-  float screen_width;
-  float screen_height;
-  bool rendering;
-  void *params;
-} Env;
-/*
-typedef struct Action_Kind {
-  ACTION_BLINK;
-  ACTION_MOVE;
-} Action_Kind;
-*/
-// typedef union
-
-typedef enum {
-  TASK_MOVE,
-  TASK_COLOR,
-} Task_Kind;
-
-typedef union Task_As {
+typedef struct Task_Move_Data {
   Vector2 move;
-  Color color;
-} Task_As;
+  size_t square_id;
+} Task_Move_Data;
+
+// TODO fix forward deklaration
+typedef struct Env Env;
 
 typedef struct Task {
-  Task_Kind kind;
-  Task_As as;
-  size_t square_id;
+  void (*setup)(Env, void*);
+  void (*update)(Env, void*);
+  void (*close)(Env, void*);
+  void* data;
 } Task;
-
-/*
-typedef struct {
-  Task *items;
-  size_t count;
-  size_t capacity;
-} Tasks;
-*/
 
 typedef struct Square {
   Vector2 position;
@@ -78,6 +53,16 @@ typedef struct Plug {
   float t; // time
 } Plug;
 
+// ENV PART
+typedef struct Env {
+  float delta_time;
+  float screen_width;
+  float screen_height;
+  bool rendering;
+  void *params;
+  Plug* p;
+} Env;
+
 Vector2 grid_2_world(size_t row, size_t col) {
   Vector2 world;
   world.x = col * (SQUARE_SIZE + SQUARE_PAD);
@@ -85,17 +70,51 @@ Vector2 grid_2_world(size_t row, size_t col) {
   return world;
 }
 
+void task_move_setup(Env env, void* data) {
+  // niy
+  Task_Move_Data *task_data = (Task_Move_Data*)data;
+}
+void task_move_update(Env env, void* data) {
+  Task_Move_Data *task_data = (Task_Move_Data *)data;
+  env.p->t = (env.p->t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
+  Square* square = &env.p->squares[task_data->square_id];
+  if (task_data->square_id < SQUARES_COUNT) {
+    Vector2 position = {
+      square->boundary.x,
+      square->boundary.y,
+    };
+    square->offset = Vector2Subtract(task_data->move, position);
+    square->offset = Vector2Scale(square->offset, env.p->t);
+  }
+}
+void task_move_close(Env env, void* data) {
+  Task_Move_Data *task_data = (Task_Move_Data *)data;
+  Square* square = &env.p->squares[task_data->square_id];
+  square->boundary.x += square->offset.x;
+  square->boundary.y += square->offset.y;
+  square->offset.x = 0;
+  square->offset.y = 0;
+}
+
+void task_move_add(Task **tasks, Task_Move_Data **data_arr, Task_Move_Data new_data) {
+  arrput(*data_arr, new_data);
+  size_t data_array_len = arrlen(*data_arr) - 1;
+  arrput(*tasks, ((Task){.data = &((*data_arr)[data_array_len]),
+                         .setup = task_move_setup,
+                         .update = task_move_update,
+                         .close = task_move_close}));
+  size_t len = arrlen(*tasks)-1;
+}
+
 int main(int argc, char **argv) {
   // Initialization
-  Env env = {0};
-  env.screen_width = 800;
-  env.screen_height = 600;
   Color background_color = ColorFromHSV(0, 0, 0.05);
   Color foreground_color = ColorFromHSV(0, 0, 0.95);
-
   Plug p = {0};
-  p.font =
-      LoadFontEx("./assets/fonts/Vollkorn-Regular.ttf", FONT_SIZE, NULL, 0);
+  // TODO put into plug
+  Task_Move_Data *data_arr = NULL;
+  //p.font =
+  //    LoadFontEx("./assets/fonts/Vollkorn-Regular.ttf", FONT_SIZE, NULL, 0);
   for (size_t i = 0; i < SQUARES_COUNT; i++) {
     Vector2 world = grid_2_world((int)(i / 8), ( i % 8));
     p.squares[i].boundary.x = world.x;
@@ -106,13 +125,17 @@ int main(int argc, char **argv) {
     p.squares[i].offset = CLITERAL(Vector2){0};
   }
   p.task_idx = 0;
+  Env env = {0};
+  env.screen_width = 800;
+  env.screen_height = 600;
+  env.p = &p;
+
   // add first task
-  arrput(p.tasks, ((Task){
-      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 1)}, .square_id = 0}));
-  arrput(p.tasks, ((Task){
-      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 2)}, .square_id = 1}));
-  arrput(p.tasks, ((Task){
-      .kind = TASK_MOVE, .as = {.move = grid_2_world(0, 3)}, .square_id = 2}));
+  task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(0, 1), .square_id = 0}));
+  task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(0, 2), .square_id = 1}));
+  task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(0, 3), .square_id = 2}));
+  task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(3, 3), .square_id = 0}));
+
   printf("starting sequencer_frontend\n");
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(env.screen_width, env.screen_height, "sequencer_frontend");
@@ -122,26 +145,11 @@ int main(int argc, char **argv) {
     // iterate through tasks
     if(p.task_idx < arrlen(p.tasks)) {
       Task task = p.tasks[p.task_idx];
-      switch (task.kind) {
-        case TASK_MOVE: {
-          p.t = (p.t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
-          if (task.square_id < SQUARES_COUNT) {
-            Square* square = &p.squares[task.square_id];
-            Vector2 position = {
-              square->boundary.x,
-              square->boundary.y,
-            };
-            square->offset = Vector2Subtract(task.as.move, position);
-            square->offset = Vector2Scale(square->offset, p.t);
-          }
-          if (p.t >= 1.0) {
-            p.t = 0.0f;
-            p.task_idx +=1;
-          }
-        } break;
-        case TASK_COLOR: {
-          //n.i.y
-        } break;
+      task.update(env, task.data);
+      if (p.t >= 1.0) {
+        task.close(env, task.data);
+        p.t = 0.0f;
+        p.task_idx +=1;
       }
     }
     ClearBackground(background_color);
@@ -160,7 +168,7 @@ int main(int argc, char **argv) {
       DrawRectangleRec(boundary, p.squares[i].color);
     }
     EndDrawing();
-    p.t += 0.001;
+    p.t += 0.01;
   }
   CloseWindow();
   UnloadFont(p.font);
