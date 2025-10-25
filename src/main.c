@@ -22,6 +22,8 @@
 typedef struct Task_Move_Data {
   Vector2 move;
   size_t square_id;
+  float t; // time
+  float t1;
 } Task_Move_Data;
 
 // TODO fix forward deklaration
@@ -29,7 +31,7 @@ typedef struct Env Env;
 
 typedef struct Task {
   void (*setup)(Env, void*);
-  void (*update)(Env, void*);
+  bool (*update)(Env, void*);
   void (*close)(Env, void*);
   void* data;
 } Task;
@@ -50,7 +52,6 @@ typedef struct Plug {
   Camera2D camera;
   Task *tasks;
   size_t task_idx;
-  float t; // time
 } Plug;
 
 // ENV PART
@@ -60,6 +61,7 @@ typedef struct Env {
   float screen_height;
   bool rendering;
   void *params;
+  float time;
   Plug* p;
 } Env;
 
@@ -72,11 +74,16 @@ Vector2 grid_2_world(size_t row, size_t col) {
 
 void task_move_setup(Env env, void* data) {
   // niy
-  Task_Move_Data *task_data = (Task_Move_Data*)data;
-}
-void task_move_update(Env env, void* data) {
   Task_Move_Data *task_data = (Task_Move_Data *)data;
-  env.p->t = (env.p->t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
+  task_data->t = 0.0;
+  task_data->t1 = env.time;
+}
+bool task_move_update(Env env, void* data) {
+  Task_Move_Data *task_data = (Task_Move_Data *)data;
+  if (task_data->t >= 1.0) {
+    return true;
+  };
+  task_data->t = (task_data->t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
   Square* square = &env.p->squares[task_data->square_id];
   if (task_data->square_id < SQUARES_COUNT) {
     Vector2 position = {
@@ -84,8 +91,12 @@ void task_move_update(Env env, void* data) {
       square->boundary.y,
     };
     square->offset = Vector2Subtract(task_data->move, position);
-    square->offset = Vector2Scale(square->offset, env.p->t);
+    square->offset = Vector2Scale(square->offset, task_data->t);
   }
+  if (task_data->t >= 1.0) {
+    return true;
+  }
+  return false;
 }
 void task_move_close(Env env, void* data) {
   Task_Move_Data *task_data = (Task_Move_Data *)data;
@@ -129,6 +140,7 @@ int main(int argc, char **argv) {
   env.screen_width = 800;
   env.screen_height = 600;
   env.p = &p;
+  env.time = 0.0f;
 
   // add first task
   task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(0, 1), .square_id = 0}));
@@ -145,10 +157,7 @@ int main(int argc, char **argv) {
     // iterate through tasks
     if(p.task_idx < arrlen(p.tasks)) {
       Task task = p.tasks[p.task_idx];
-      task.update(env, task.data);
-      if (p.t >= 1.0) {
-        task.close(env, task.data);
-        p.t = 0.0f;
+      if(task.update(env, task.data), env.time){
         p.task_idx +=1;
       }
     }
@@ -168,7 +177,7 @@ int main(int argc, char **argv) {
       DrawRectangleRec(boundary, p.squares[i].color);
     }
     EndDrawing();
-    p.t += 0.01;
+    env.time += 0.01;
   }
   CloseWindow();
   UnloadFont(p.font);
