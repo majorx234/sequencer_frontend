@@ -76,13 +76,16 @@ void task_move_setup(Env env, void* data) {
   // niy
   Task_Move_Data *task_data = (Task_Move_Data *)data;
   task_data->t = 0.0;
-  task_data->t1 = env.time;
+  task_data->t1 = -1; // env.time;
 }
 bool task_move_update(Env env, void* data) {
   Task_Move_Data *task_data = (Task_Move_Data *)data;
   if (task_data->t >= 1.0) {
     return true;
   };
+  if (task_data->t1 < 0.0) {
+    task_data->t1 = env.time;
+  }
   task_data->t = (task_data->t*SQUARE_MOVE_DURATION + env.delta_time)/SQUARE_MOVE_DURATION;
   Square* square = &env.p->squares[task_data->square_id];
   if (task_data->square_id < SQUARES_COUNT) {
@@ -141,6 +144,7 @@ int main(int argc, char **argv) {
   env.screen_height = 600;
   env.p = &p;
   env.time = 0.0f;
+  env.delta_time = 0.01;
 
   // add first task
   task_move_add(&p.tasks, &data_arr, ((Task_Move_Data){.move = grid_2_world(0, 1), .square_id = 0}));
@@ -157,7 +161,7 @@ int main(int argc, char **argv) {
     // iterate through tasks
     if(p.task_idx < arrlen(p.tasks)) {
       Task task = p.tasks[p.task_idx];
-      if(task.update(env, task.data), env.time){
+      if (task.update(env, task.data)) {
         p.task_idx +=1;
       }
     }
@@ -177,7 +181,7 @@ int main(int argc, char **argv) {
       DrawRectangleRec(boundary, p.squares[i].color);
     }
     EndDrawing();
-    env.time += 0.01;
+    env.time += env.delta_time;
   }
   CloseWindow();
   UnloadFont(p.font);
