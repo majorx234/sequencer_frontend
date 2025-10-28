@@ -98,6 +98,10 @@ DOCUMENTATION
         T arrput(T* a, T b);
           Appends the item b to the end of array a. Returns b.
 
+      arrputi:
+        int arrput(T* a, T b);
+          Appends the item b to the end of array a. Returns index.
+
       arrins:
         T arrins(T* a, int p, T b);
           Inserts the item b into the middle of array a, into a[p],
@@ -402,6 +406,7 @@ CREDITS
 #define arrlen      stbds_arrlen
 #define arrlenu     stbds_arrlenu
 #define arrput      stbds_arrput
+#define arrputi     stbds_arrputi
 #define arrpush     stbds_arrput
 #define arrpop      stbds_arrpop
 #define arrfree     stbds_arrfree
@@ -546,6 +551,7 @@ extern void * stbds_shmode_func(size_t elemsize, int mode);
 #define stbds_arrlen(a)        ((a) ? (ptrdiff_t) stbds_header(a)->length : 0)
 #define stbds_arrlenu(a)       ((a) ?             stbds_header(a)->length : 0)
 #define stbds_arrput(a,v)      (stbds_arrmaybegrow(a,1), (a)[stbds_header(a)->length++] = (v))
+#define stbds_arrputi(a,v)      (stbds_arrmaybegrow(a,1), (a)[stbds_header(a)->length++] = (v), stbds_header(a)->length - 1)
 #define stbds_arrpush          stbds_arrput  // synonym
 #define stbds_arrpop(a)        (stbds_header(a)->length--, (a)[stbds_header(a)->length])
 #define stbds_arraddn(a,n)     ((void)(stbds_arraddnindex(a, n)))    // deprecated, use one of the following instead:
