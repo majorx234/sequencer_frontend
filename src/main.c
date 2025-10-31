@@ -57,6 +57,11 @@ typedef struct Plug {
 // ENV PART
 typedef struct Env {
   float delta_time;
+  double previous_time;
+  double current_time;
+  double update_draw_time;
+  double wait_time;
+  int target_fps;
   float screen_width;
   float screen_height;
   bool rendering;
@@ -140,6 +145,7 @@ int main(int argc, char **argv) {
   }
   p.task_idx = 0;
   Env env = {0};
+  env.target_fps = 60;
   env.screen_width = 800;
   env.screen_height = 600;
   env.p = &p;
@@ -181,7 +187,19 @@ int main(int argc, char **argv) {
       DrawRectangleRec(boundary, p.squares[i].color);
     }
     EndDrawing();
+
+    // fps handling
+    env.current_time = GetTime();
+    env.update_draw_time = env.current_time - env.previous_time;
     env.time += env.delta_time;
+    env.wait_time = (1.0f/(float)env.target_fps) - env.update_draw_time;
+    if (env.wait_time > 0.0)
+    {
+      WaitTime((float)env.wait_time);
+      env.current_time = GetTime();
+      env.delta_time = (float)(env.current_time - env.previous_time);
+    }
+    env.previous_time = env.current_time;
   }
   CloseWindow();
   UnloadFont(p.font);
